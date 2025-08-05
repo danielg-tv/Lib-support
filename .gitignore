@@ -404,6 +404,5 @@ FodyWeavers.xsd
 
 # Ignore VS
 .vscode/
-helpers.js
 Test Files/
 charting_library-master/
