@@ -216,6 +216,7 @@ import Datafeed from './datafeed.js';
             }
           }
           this._isDirty = true;
+          console.log("Saved: saveLineToolsAndGroups triggered for", layoutId, chartId);
         }
         async loadLineToolsAndGroups(
           layoutId,
@@ -299,6 +300,8 @@ import Datafeed from './datafeed.js';
 		? { ...savedChart, content: undefined }
 		: undefined;
 
+
+  // if you need to create custom timeframe start of year ...
 	// const now = new Date();
 	// const startOfYear = new Date(now.getFullYear(), 0, 1);
 	// const diffInDays = Math.floor((now - startOfYear) / (1000 * 60 * 60 * 24));
@@ -312,7 +315,7 @@ var widget = (window.tvWidget =  new TradingView.widget({
     container: 'tv_chart_container',       // Reference to the attribute of the DOM element
     datafeed: Datafeed,
     library_path: '../charting_library-master/charting_library/', 
-    debug: true,
+    // debug: true,
     // debug_broker: "all",
     theme: 'dark',
     user_id: 'public_user_id',
@@ -373,15 +376,16 @@ var widget = (window.tvWidget =  new TradingView.widget({
 	},
 
     enabled_features: [
-      "pre_post_market_sessions",
+      // "pre_post_market_sessions",
       'items_favoriting',
       'secondary_series_extend_time_scale',
       'custom_resolutions',
       "saveload_separate_drawings_storage",
       'allow_arbitrary_symbol_search_input',
       "display_data_mode",
-      "pre_post_market_price_line",
+      // "pre_post_market_price_line",
       "legend_last_day_change",
+      "use_symbol_name_for_header_toolbar"
     ],
 
 
@@ -444,7 +448,7 @@ var widget = (window.tvWidget =  new TradingView.widget({
 	saved_data_meta_info: savedDataMetaInfo,
 
 	load_last_chart: true,
-	auto_save_delay: 10,
+	auto_save_delay: 20,
 }));
 
   widget.onChartReady(() => {  

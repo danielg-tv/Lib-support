@@ -12,6 +12,12 @@ import {
 // This is essential for the streaming logic to update the chart correctly.
 const lastBarsCache = new Map();
 
+// Quote cache
+const quoteSubscriptions = new Map();
+const quotePriceCache = new Map(); 
+
+
+
 // DatafeedConfiguration implementation
 const configurationData = {
 	supports_timescale_marks: true,
@@ -126,7 +132,7 @@ export default {
 		const symbols = await getAllSymbols();
 		const symbolItem = symbols.find(({
 			ticker,
-		}) => ticker === symbolName);
+		}) => ticker.toLowerCase() === symbolName.toLowerCase());
 		if (!symbolItem) {
 			console.log('[resolveSymbol]: Cannot resolve symbol', symbolName);
 			onResolveErrorCallback("unknown_symbol"); // for ghost icon
@@ -250,6 +256,7 @@ export default {
 
 	getMarks: function(symbolInfo, from, to, onDataCallback, resolution) {
 		console.log("=====getMarks running", from, to, from + 75600);
+		const time = Date.now() / 1000;
 		const marks = [
 			{
 				id: 1,
@@ -271,7 +278,7 @@ export default {
 			},
 			{
 				id: 3,
-				time: 1749686400, 
+				time: time, 
 				color: 'blue',
 				text: ['Third marker'],
 				label: 'T',
@@ -280,7 +287,7 @@ export default {
 			},
 			{
 				id: 4,
-				time: 1749686400,
+				time: time,
 				color: 'purple',
 				text: ['Fourth marker'],
 				label: 'F',
@@ -289,7 +296,7 @@ export default {
 			},
 			{
 				id: 5,
-				time: 1749600000,
+				time: time,
 				color: 'orange',
 				text: ['Fifth marker'],
 				label: 'O',
@@ -301,10 +308,11 @@ export default {
 	},
 
 	getTimescaleMarks: function(symbolInfo, from, to, onDataCallback, resolution) {
+		const time = Date.now() / 1000;
 		const time_marks = [
 			{
 				id: 'tsm1',
-				time: 1749686400,
+				time: time,
 				color: "#089981",
 				label: "A",
 				labelFontColor: "#FFFFFF",
@@ -312,7 +320,7 @@ export default {
 			},
 			{
 				id: 'tsm2',
-				time: 1749600000,
+				time: time,
 				color: "#FFAA00",
 				label: "B",
 				labelFontColor: "#FFFFFF",
@@ -323,111 +331,142 @@ export default {
 	},
 
 	// TP ONLY
-	getQuotes(symbols, onDataCallback, onErrorCallback) {
-    try {
-        const data = (symbols || []).map(symbol => {
-            const price = 3550;
-            const spread = parseFloat((0.1 - (Math.random() * 0.01)).toFixed(3));
-            const ask = parseFloat((price + spread / 2).toFixed(3));
-            const bid = parseFloat((price - spread / 2).toFixed(3));
-            const lp = parseFloat((price + (Math.random() - 0.5) * spread).toFixed(3));
-            const open_price = parseFloat((price + (Math.random() - 0.5) * 2).toFixed(3));
-            const high_price = parseFloat((Math.max(price, ask, lp) + Math.random() * 5).toFixed(3));
-            const low_price = parseFloat((Math.min(price, bid, lp) - Math.random() * 5).toFixed(3));
-            const prev_close_price = parseFloat((price + (Math.random() - 0.5) * 2).toFixed(3));
-            const volume = parseFloat((Math.random() * 1000 + 100).toFixed(3));
-            const ch = parseFloat((lp - prev_close_price).toFixed(3));
-            const chp = prev_close_price !== 0 ? parseFloat(((ch / prev_close_price) * 100).toFixed(3)) : 0;
-            const rtc = parseFloat((price + (Math.random() - 0.5) * 5).toFixed(3));
-            const rtc_time = Date.now();
-            const rch = parseFloat((rtc - price).toFixed(3));
-            const rchp = price !== 0 ? parseFloat(((rch / price) * 100).toFixed(3)) : 0;
+	getQuotes: async function (symbols, onDataCallback, onErrorCallback) {
+		try {
+			const fromSymbols = new Set();
+			const toSymbols = new Set();
+			const parsedSymbols = {};
 
-            return {
-                n: symbol,
-                s: 'ok',
-                v: {
-                    lp,
-                    ask,
-                    bid,
-                    spread,
-                    open_price,
-                    high_price,
-                    low_price,
-                    prev_close_price,
-                    original_name: symbol,
-                    volume,
-                    ch,
-                    chp,
-                    rtc,
-                    rtc_time,
-                    rch,
-                    rchp,
-                },
-            };
-        });
+			for (const symbol of symbols) {
+				const parsed = parseFullSymbol(symbol);
+				if (parsed) {
+					fromSymbols.add(parsed.fromSymbol);
+					toSymbols.add(parsed.toSymbol);
+					parsedSymbols[symbol] = parsed;
+				}
+			}
 
-        // Always call the callback asynchronously (as TradingView expects)
-        setTimeout(() => onDataCallback(data), 10);
+			if (fromSymbols.size === 0) {
+				setTimeout(() => onDataCallback([]), 0);
+				return;
+			}
+
+			const fsyms = [...fromSymbols].join(',');
+			const tsyms = [...toSymbols].join(',');
+			const pricesData = await makeApiRequest(`data/pricemultifull?fsyms=${fsyms}&tsyms=${tsyms}`);
+
+			const data = symbols.map(symbol => {
+				const parsed = parsedSymbols[symbol];
+				if (
+					parsed &&
+					pricesData.RAW &&
+					pricesData.RAW[parsed.fromSymbol] &&
+					pricesData.RAW[parsed.fromSymbol][parsed.toSymbol]
+				) {
+					const priceInfo = pricesData.RAW[parsed.fromSymbol][parsed.toSymbol];
+					const price = priceInfo.PRICE;
+					const spread = parseFloat((0.1 - Math.random() * 0.01).toFixed(3));
+					const ask = parseFloat((price + spread / 2).toFixed(3));
+					const bid = parseFloat((price - spread / 2).toFixed(3));
+
+					const quote = {
+						price: price, // Store base price for simulation
+						lp: price,
+						ask: ask,
+						bid: bid,
+						spread: spread,
+						open_price: priceInfo.OPENDAY,
+						high_price: priceInfo.HIGHDAY,
+						low_price: priceInfo.LOWDAY,
+						prev_close_price: priceInfo.OPEN24HOUR,
+						volume: priceInfo.VOLUME24HOURTO,
+						ch: priceInfo.CHANGE24HOUR,
+						chp: priceInfo.CHANGEPCT24HOUR,
+						rtc: priceInfo.PRICE + (priceInfo.CHANGEHOUR || 0),
+						rtc_time: priceInfo.LASTUPDATE,
+						rch: priceInfo.CHANGEHOUR,
+						rchp: priceInfo.CHANGEPCTHOUR,
+						original_name: symbol,
+						short_name: symbol,
+					};
+
+					quotePriceCache.set(symbol, quote);
+
+					return {
+						n: symbol,
+						s: 'ok',
+						v: quote,
+					};
+				}
+				return { n: symbol, s: 'error', v: {} };
+			}).filter(item => item.s === 'ok');
+
+			setTimeout(() => onDataCallback(data), 10);
 		} catch (err) {
 			if (onErrorCallback) onErrorCallback(err);
 		}
 	},
 
-	// Work in progress
-	unsubscribeQuotes() {
-    },
+	subscribeQuotes: function (symbols, fastSymbols, onRealtimeCallback, listenerGUID) {
+		const allSymbols = [...new Set([...symbols, ...fastSymbols])];
 
-	// TP only
-	subscribeQuotes(symbols, fastSymbols, onRealtimeCallback, listenerGUID) {
-		console.log('subscribeQuotes invoked: ', symbols, fastSymbols);
-    	const names = symbols.concat(fastSymbols);
-    	names.forEach((name) => {
-			setInterval(() => {
-        // Build the array of quote objects
-            const price = 3550;
-            const spread = 0.2;
-            const ask = parseFloat((price + spread / 2).toFixed(3));
-            const bid = parseFloat((price - spread / 2).toFixed(3));
-            const lp = parseFloat((price + (Math.random() - 0.5) * spread).toFixed(3));
-            const open_price = parseFloat((price + (Math.random() - 0.5) * 2).toFixed(3));
-            const high_price = parseFloat((Math.max(price, ask, lp) + Math.random() * 5).toFixed(3));
-            const low_price = parseFloat((Math.min(price, bid, lp) - Math.random() * 5).toFixed(3));
-            const prev_close_price = parseFloat((price + (Math.random() - 0.5) * 2).toFixed(3));
-            const volume = parseFloat((Math.random() * 1000 + 100).toFixed(3));
-            const ch = parseFloat((lp - prev_close_price).toFixed(3));
-            const chp = prev_close_price !== 0 ? parseFloat(((ch / prev_close_price) * 100).toFixed(3)) : 0;
-            const rtc = parseFloat((price + (Math.random() - 0.5) * 5).toFixed(3));
-            const rtc_time = Date.now();
-            const rch = parseFloat((rtc - price).toFixed(3));
-            const rchp = price !== 0 ? parseFloat(((rch / price) * 100).toFixed(3)) : 0;
+		const intervalId = setInterval(() => {
+			const quotes = allSymbols.map(symbol => {
+				const lastQuote = quotePriceCache.get(symbol);
+				if (!lastQuote) return null;
 
-            onRealtimeCallback([ 
-				{
-                s: "ok",
-                n: name,
-                v: {
-                    lp,
-                    ask,
-                    bid,
-                    spread,
-                    open_price,
-                    high_price,
-                    low_price,
-                    prev_close_price,
-                    original_name: name,
-                    volume,
-                    ch,
-                    chp,
-                    rtc,
-                    rtc_time,
-                    rch,
-                    rchp,
-                    short_name: name,
-                },
-            },
-        	]);
-        }, 5000);
-		});
-    },
+				// Base from cache
+				const price = lastQuote.price;
+				const spread = lastQuote.spread || 0.1;
+
+				// Simulate small movement
+				const lp = parseFloat((price + (Math.random() - 0.5) * spread).toFixed(3));
+				const ask = parseFloat((lp + spread / 2).toFixed(3));
+				const bid = parseFloat((lp - spread / 2).toFixed(3));
+				const prev_close_price = lastQuote.prev_close_price;
+
+				const high_price = Math.max(lastQuote.high_price, lp);
+				const low_price = Math.min(lastQuote.low_price, lp);
+				const volume = parseFloat((lastQuote.volume + Math.random() * 10).toFixed(3));
+				const ch = parseFloat((lp - prev_close_price).toFixed(3));
+				const chp = prev_close_price !== 0
+					? parseFloat(((ch / prev_close_price) * 100).toFixed(3))
+					: 0;
+
+				// Simulate real-time change fields
+				const rtc = lp;
+				const rtc_time = Date.now();
+				const rch = parseFloat((rtc - (lastQuote.rtc || price)).toFixed(3));
+				const rchp = lastQuote.rtc !== 0 ? parseFloat(((rch / lastQuote.rtc) * 100).toFixed(3)) : 0;
+
+				const updatedQuote = {
+					...lastQuote, // Carry over static fields like open_price
+					price: lp, // Update the base price for the next tick
+					lp, ask, bid, high_price, low_price,
+					volume, ch, chp, rtc, rtc_time, rch, rchp,
+				};
+
+				quotePriceCache.set(symbol, updatedQuote);
+
+				return {
+					s: 'ok',
+					n: symbol,
+					v: updatedQuote,
+				};
+			}).filter(Boolean);
+
+			if (quotes.length > 0) onRealtimeCallback(quotes);
+		}, 1500);
+
+		quoteSubscriptions.set(listenerGUID, intervalId);
+	},
+
+	unsubscribeQuotes: function(listenerGUID) {
+		const intervalId = quoteSubscriptions.get(listenerGUID);
+		if (intervalId) {
+			clearInterval(intervalId);
+			quoteSubscriptions.delete(listenerGUID);
+			console.log('[unsubscribeQuotes]: Stopped polling for', listenerGUID);
+		}
+	},
 };
