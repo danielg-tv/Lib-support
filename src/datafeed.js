@@ -188,7 +188,7 @@ export default {
 			fsym: parsedSymbol.fromSymbol,
 			tsym: parsedSymbol.toSymbol,
 			toTs: to,
-			limit: 2000,
+			limit: 1000,
 		};
 	    // example of historical OHLC 5 minute data request: 
 		// https://min-api.cryptocompare.com/data/v2/histominute?fsym=ETH&tsym=USDT&limit=10&e=Binance&aggregate=5&api_key="API_KEY"
