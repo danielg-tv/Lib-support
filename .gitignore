@@ -3,3 +3,4 @@ vendor/tradingview/
 local-packages/
 .DS_Store
 npm-debug.log*
+third_party/
