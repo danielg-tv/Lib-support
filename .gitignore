@@ -1,0 +1,5 @@
+node_modules/
+vendor/tradingview/
+local-packages/
+.DS_Store
+npm-debug.log*

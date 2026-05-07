@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "scripts": {
+    "start": "node server.mjs",
+    "start:static": "serve .",
+    "postinstall": "npm run tv:sync",
+    "tv:sync": "node scripts/sync-tradingview-assets.mjs",
+    "tv:use-version": "node scripts/set-tradingview-version.mjs"
+  },
+  "dependencies": {
+    "charting_library": "git+ssh://git@github.com/tradingview/trading_platform.git#semver:31.2.0"
+  },
+  "devDependencies": {
+    "serve": "^14.2.5"
+  }
+}
