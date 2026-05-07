@@ -26,7 +26,13 @@ Then open:
 
 - `src/` contains the app code.
 - `vendor/tradingview/charting_library/` is generated from the npm install.
-- `third_party/tradingview/broker-sample/` is kept in the repo because the app extends `Brokers.BrokerDemo`.
+- `third_party/tradingview/broker-sample/` is not kept in the repo but it's required because the app extends `Brokers.BrokerDemo`. You should add bundle.js to this directory.
+
+```bash
+cd <this-project>
+mkdir third_party/tradingview/broker-sample/dist
+cp path_to_bundle.js third_party/tradingview/broker-sample/dist
+```
 
 That means the project intentionally uses:
 
