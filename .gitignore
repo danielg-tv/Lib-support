@@ -1,0 +1,13 @@
+.vscode/
+
+# Generated install output
+node_modules/
+vendor/tradingview/
+
+# Local-only dependency copies
+third_party/
+local-packages/
+
+# OS and npm noise
+.DS_Store
+npm-debug.log*
