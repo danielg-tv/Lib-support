@@ -1,25 +1,30 @@
 # TradingView Charting Library Datafeed Example
 
-This project demonstrates a Binance-backed TradingView datafeed with two optional run modes:
+This project demonstrates a Binance-backed TradingView datafeed with two
+optional run modes:
 
 - Free Advanced Charts from `tradingview/charting_library`.
 - Paid Trading Platform from `tradingview/trading_platform`.
 
-You only need the TradingView package for the page you want to test. If both packages are present, both routes work in the same checkout.
+You only need the TradingView package for the page you want to test. If both
+packages are present, both routes work in the same checkout.
 
 ## Download A TradingView Package
 
-If you have GitHub SSH access to TradingView's repositories, npm can download and place the package for you:
+If you have GitHub SSH access to TradingView's repositories, npm can download
+and place the package for you:
 
 ```bash
 npm run tv:install:ac -- 31.2.0 # current latest version
 npm run tv:install:tp -- 31.2.0 # current latest version
 ```
 
-Use only the command for the package you need. If you omit the version, the script downloads `master`.
+Use only the command for the package you need. If you omit the version, the
+script downloads `master`.
 
 - `tv:install:ac` installs only Advanced Charts.
-- `tv:install:tp` installs both Advanced Charts and Trading Platform, so the homepage still works.
+- `tv:install:tp` installs both Advanced Charts and Trading Platform, so the
+  homepage still works.
 
 Place one or both package folders in the project root:
 
@@ -36,7 +41,9 @@ charting-library-tutorial/
 - Use `charting_library-master` for the free Advanced Charts page.
 - Use `trading_platform-master` for the Trading Platform page.
 
-For Trading Platform broker features, the `tv:install:tp` script also copies TradingView's BrokerDemo bundle when it is present in the package. If you place packages manually, copy the bundle into this path:
+For Trading Platform broker features, the `tv:install:tp` script also copies
+TradingView's BrokerDemo bundle when it is present in the package. If you place
+packages manually, copy the bundle into this path:
 
 ```text
 third_party/tradingview/broker-sample/dist/bundle.js
@@ -70,8 +77,11 @@ http://127.0.0.1:3000/trading
 
 ## Routes
 
-- `/`: minimal Advanced Charts example with chart datafeed, theme toggle, and documentation button.
-- `/trading`: Trading Platform example with broker sample, DOM, account manager, alerts, save/load, watchlist, quotes, CoinDesk news, toolbar controls, and multi-chart support.
+- `/`: minimal Advanced Charts example with chart datafeed, theme toggle, and
+  documentation button.
+- `/trading`: Trading Platform example with broker sample, DOM, account manager,
+  alerts, save/load, watchlist, quotes, CoinDesk news, toolbar controls, and
+  multi-chart support.
 
 ## Updating TradingView Packages
 
@@ -82,22 +92,29 @@ npm run tv:install:ac -- 31.2.0
 npm run tv:install:tp -- 31.2.0
 ```
 
-If you manually placed `charting_library-master` or `trading_platform-master` in the project root, run:
+If you manually placed `charting_library-master` or `trading_platform-master` in
+the project root, run:
 
 ```bash
 npm run tv:sync
 npm run start
 ```
 
-Hard refresh the browser after package changes so old TradingView chunks are not reused.
+Hard refresh the browser after package changes so old TradingView chunks are not
+reused.
 
 ## Useful Notes
 
 - `npm run tv:sync` copies package assets into `vendor/tradingview/`.
-- `npm run tv:install:ac` installs only the Advanced Charts runtime into `vendor/tradingview/advanced_charts`.
-- `npm run tv:install:tp` installs Advanced Charts and Trading Platform into `vendor/tradingview/`.
+- `npm run tv:install:ac` installs only the Advanced Charts runtime into
+  `vendor/tradingview/advanced_charts`.
+- `npm run tv:install:tp` installs Advanced Charts and Trading Platform into
+  `vendor/tradingview/`.
 - If only `charting_library-master` exists, only `/` is expected to work.
 - If only `trading_platform-master` exists, only `/trading` is expected to work.
-- `npm run start` serves clean routes and the CoinDesk RSS proxy used by `/trading`.
-- `npm run start:static` is only a static fallback; Trading Platform CoinDesk news will not load there.
-- More implementation detail is in [INTEGRATION_DETAILS.md](./INTEGRATION_DETAILS.md).
+- `npm run start` serves clean routes and the CoinDesk RSS proxy used by
+  `/trading`.
+- `npm run start:static` is only a static fallback; Trading Platform CoinDesk
+  news will not load there.
+- More implementation detail is in
+  [INTEGRATION_DETAILS.md](./INTEGRATION_DETAILS.md).

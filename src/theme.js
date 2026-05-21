@@ -1,19 +1,23 @@
 // Allows reviewers to force a theme with ?theme=dark or ?theme=light.
 function getRequestedTheme() {
-  const requestedTheme = new URLSearchParams(window.location.search).get("theme");
-  return requestedTheme === "dark" || requestedTheme === "light" ? requestedTheme : null;
+	const requestedTheme = new URLSearchParams(window.location.search).get(
+		'theme'
+	);
+	return requestedTheme === 'dark' || requestedTheme === 'light'
+		? requestedTheme
+		: null;
 }
 
 // Falls back to the browser preference when the URL does not force a theme.
 function prefersDarkTheme() {
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+	return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 }
 
 // TradingView loads custom widget CSS through a URL, so we expose this string as a Blob.
 const customCSS = `
   @font-face {
     font-family: 'NanumBarunGothic';
-    src: url('/src/fonts/NanumBarunGothic.otf') format('opentype');
+    src: url('/src/assets/fonts/NanumBarunGothic.otf') format('opentype');
     font-weight: normal;
     font-style: normal;
   }
@@ -140,51 +144,58 @@ const customCSS = `
 `;
 
 const cssBlob = new Blob([customCSS], {
-  type: "text/css",
+	type: 'text/css',
 });
 
 export const cssBlobUrl = URL.createObjectURL(cssBlob);
-export const theme = getRequestedTheme() ?? (prefersDarkTheme() ? "dark" : "light");
+export const theme =
+	getRequestedTheme() ?? (prefersDarkTheme() ? 'dark' : 'light');
 
 // Keeps chart-pane colors synchronized with the resolved widget theme.
 export function getChartOverrides(currentTheme = theme) {
-  if (currentTheme === "dark") {
-    return {
-      "paneProperties.backgroundType": "gradient",
-      "paneProperties.background": "#111827",
-      "paneProperties.backgroundGradientStartColor": "#36364a",
-      "paneProperties.backgroundGradientEndColor": "#353924",
-      "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.08)",
-      "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.08)",
-      "paneProperties.crossHairProperties.color": "#b9c0cc",
-      "paneProperties.crossHairProperties.transparency": 40,
-      "scalesProperties.textColor": "#ffffff",
-      "scalesProperties.lineColor": "rgba(255, 255, 255, 0.14)",
-      "scalesProperties.fontSize": 14,
-      "time_scale.show_bar_countdown": true,
-      "mainSeriesProperties.showPrevClosePriceLine": true,
-      "backgrounds.outOfSession.color": "rgba(16, 20, 32, 0.2)",
-      "mainSeriesProperties.baselineStyle.topLineColor": "rgba(205, 17, 33, 0.2)",
-      "mainSeriesProperties.baselineStyle.bottomLineColor": "rgba(10, 32, 6, 0.2)",
-    };
-  }
+	if (currentTheme === 'dark') {
+		return {
+			'paneProperties.backgroundType': 'gradient',
+			'paneProperties.background': '#111827',
+			'paneProperties.backgroundGradientStartColor': '#36364a',
+			'paneProperties.backgroundGradientEndColor': '#353924',
+			'paneProperties.vertGridProperties.color':
+				'rgba(255, 255, 255, 0.08)',
+			'paneProperties.horzGridProperties.color':
+				'rgba(255, 255, 255, 0.08)',
+			'paneProperties.crossHairProperties.color': '#b9c0cc',
+			'paneProperties.crossHairProperties.transparency': 40,
+			'scalesProperties.textColor': '#ffffff',
+			'scalesProperties.lineColor': 'rgba(255, 255, 255, 0.14)',
+			'scalesProperties.fontSize': 14,
+			'time_scale.show_bar_countdown': true,
+			'mainSeriesProperties.showPrevClosePriceLine': true,
+			'backgrounds.outOfSession.color': 'rgba(16, 20, 32, 0.2)',
+			'mainSeriesProperties.baselineStyle.topLineColor':
+				'rgba(205, 17, 33, 0.2)',
+			'mainSeriesProperties.baselineStyle.bottomLineColor':
+				'rgba(10, 32, 6, 0.2)',
+		};
+	}
 
-  return {
-    "paneProperties.backgroundType": "solid",
-    "paneProperties.background": "#f8fafc",
-    "paneProperties.backgroundGradientStartColor": "#f8fafc",
-    "paneProperties.backgroundGradientEndColor": "#eef2f7",
-    "paneProperties.vertGridProperties.color": "rgba(15, 23, 42, 0.08)",
-    "paneProperties.horzGridProperties.color": "rgba(15, 23, 42, 0.08)",
-    "paneProperties.crossHairProperties.color": "#475569",
-    "paneProperties.crossHairProperties.transparency": 35,
-    "scalesProperties.textColor": "#1f2933",
-    "scalesProperties.lineColor": "rgba(15, 23, 42, 0.16)",
-    "scalesProperties.fontSize": 14,
-    "time_scale.show_bar_countdown": true,
-    "mainSeriesProperties.showPrevClosePriceLine": true,
-    "backgrounds.outOfSession.color": "rgba(239, 243, 247, 0.75)",
-    "mainSeriesProperties.baselineStyle.topLineColor": "rgba(205, 17, 33, 0.16)",
-    "mainSeriesProperties.baselineStyle.bottomLineColor": "rgba(10, 112, 41, 0.16)",
-  };
+	return {
+		'paneProperties.backgroundType': 'solid',
+		'paneProperties.background': '#f8fafc',
+		'paneProperties.backgroundGradientStartColor': '#f8fafc',
+		'paneProperties.backgroundGradientEndColor': '#eef2f7',
+		'paneProperties.vertGridProperties.color': 'rgba(15, 23, 42, 0.08)',
+		'paneProperties.horzGridProperties.color': 'rgba(15, 23, 42, 0.08)',
+		'paneProperties.crossHairProperties.color': '#475569',
+		'paneProperties.crossHairProperties.transparency': 35,
+		'scalesProperties.textColor': '#1f2933',
+		'scalesProperties.lineColor': 'rgba(15, 23, 42, 0.16)',
+		'scalesProperties.fontSize': 14,
+		'time_scale.show_bar_countdown': true,
+		'mainSeriesProperties.showPrevClosePriceLine': true,
+		'backgrounds.outOfSession.color': 'rgba(239, 243, 247, 0.75)',
+		'mainSeriesProperties.baselineStyle.topLineColor':
+			'rgba(205, 17, 33, 0.16)',
+		'mainSeriesProperties.baselineStyle.bottomLineColor':
+			'rgba(10, 112, 41, 0.16)',
+	};
 }
