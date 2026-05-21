@@ -1,14 +1,16 @@
-// Points the widget at a same-origin proxy for CoinDesk's public RSS feed.
-export const COINDESK_RSS_NEWS_FEED = {
+const COINDESK_RSS_PROXY_URL = "/api/news/coindesk-rss";
+
+// CoinDesk does not send browser CORS headers, so the local server exposes it same-origin.
+// TradingView reads this object directly through the rss_news_feed widget option.
+export const CRYPTO_RSS_NEWS_FEED = {
   default: {
-    url: "/api/news/coindesk-rss",
+    url: COINDESK_RSS_PROXY_URL,
     name: "CoinDesk",
   },
   crypto: {
-    url: "/api/news/coindesk-rss",
+    url: COINDESK_RSS_PROXY_URL,
     name: "CoinDesk",
   },
 };
 
-// Sets the news panel title shown above CoinDesk stories.
-export const COINDESK_RSS_TITLE = "CoinDesk";
+export const CRYPTO_RSS_TITLE = "CoinDesk";

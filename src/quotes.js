@@ -2,6 +2,7 @@ import { BINANCE_EXCHANGE, parseFullSymbol } from "./helpers.js";
 
 const WSS_URL = "wss://stream.binance.com:9443/ws";
 const MAX_RECONNECT_DELAY = 30_000;
+const SOCKET_CONNECT_DELAY_MS = 100;
 
 const streamRefCounts = new Map();
 const streamToMeta = new Map();
@@ -13,6 +14,7 @@ const listenerCallbacks = new Map();
 let socket = null;
 let reconnectDelay = 1_000;
 let reconnectTimer = null;
+let connectTimer = null;
 let requestId = 0;
 
 // Generates monotonically increasing ids for Binance websocket control messages.
@@ -53,8 +55,58 @@ function sendUnsubscribe(ws, streamName) {
   }));
 }
 
+// Checks whether any TradingView listener still needs Binance quote updates.
+function hasActiveStreams() {
+  return [...streamRefCounts.values()].some((count) => count > 0);
+}
+
+// Defers opening Binance until TradingView's initial quote-subscription churn settles.
+function ensureSocket() {
+  if (
+    socket &&
+    (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)
+  ) {
+    return socket;
+  }
+
+  if (!connectTimer) {
+    connectTimer = setTimeout(() => {
+      connectTimer = null;
+
+      if (hasActiveStreams()) {
+        socket = createSocket();
+      }
+    }, SOCKET_CONNECT_DELAY_MS);
+  }
+
+  return socket;
+}
+
+// Cancels pending reconnect/start work when TradingView releases every quote stream.
+// Already-open sockets are left alone; if Binance closes them while idle, we do not reconnect.
+function stopSocketWorkIfIdle() {
+  if (hasActiveStreams()) return;
+
+  if (connectTimer) {
+    clearTimeout(connectTimer);
+    connectTimer = null;
+  }
+
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  reconnectDelay = 1_000;
+}
+
 // Creates the shared quote socket and restores active stream subscriptions after reconnects.
 function createSocket() {
+  if (connectTimer) {
+    clearTimeout(connectTimer);
+    connectTimer = null;
+  }
+
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -73,14 +125,22 @@ function createSocket() {
   });
 
   ws.addEventListener("close", () => {
+    if (socket === ws) {
+      socket = null;
+    }
+
+    if (!hasActiveStreams()) return;
+
     reconnectTimer = setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
       socket = createSocket();
     }, reconnectDelay);
   });
 
-  ws.addEventListener("error", (error) => {
-    console.error("[quotes socket] Error:", error);
+  ws.addEventListener("error", () => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.close();
+    }
   });
 
   ws.addEventListener("message", onMessage);
@@ -95,7 +155,7 @@ function addStreamRef(fullSymbol, providerSymbol, streamName, type) {
   providerSymbolToFullSymbol.set(providerSymbol, fullSymbol);
 
   if (count === 0) {
-    sendSubscribe(socket, streamName);
+    sendSubscribe(ensureSocket(), streamName);
   }
 }
 
@@ -113,6 +173,7 @@ function removeStreamRef(streamName) {
   const meta = streamToMeta.get(streamName);
   streamToMeta.delete(streamName);
   sendUnsubscribe(socket, streamName);
+  stopSocketWorkIfIdle();
 
   if (!meta) return;
 
@@ -154,8 +215,6 @@ function onMessage(event) {
   });
 }
 
-socket = createSocket();
-
 // Subscribes quote listeners to shared Binance day and hour ticker streams.
 export function subscribeQuotesOnStream(symbols, listenerGUID, onEvent) {
   listenerCallbacks.set(listenerGUID, onEvent);
@@ -178,6 +237,7 @@ export function subscribeQuotesOnStream(symbols, listenerGUID, onEvent) {
   });
 
   listenerToSymbols.set(listenerGUID, trackedSymbols);
+  stopSocketWorkIfIdle();
 }
 
 // Removes quote listeners and releases any streams they no longer need.

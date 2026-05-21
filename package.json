@@ -1,16 +1,17 @@
 {
+  "name": "tradingview-charting-library-datafeed-example",
   "private": true,
   "scripts": {
     "start": "node server.mjs",
-    "start:static": "serve .",
-    "postinstall": "npm run tv:sync",
+    "start:static": "serve . --listen 3000",
+    "tv:install:ac": "node scripts/install-tradingview-package.mjs ac",
+    "tv:install:tp": "node scripts/install-tradingview-package.mjs tp",
     "tv:sync": "node scripts/sync-tradingview-assets.mjs",
-    "tv:use-version": "node scripts/set-tradingview-version.mjs"
-  },
-  "dependencies": {
-    "charting_library": "git+ssh://git@github.com/tradingview/trading_platform.git#semver:31.2.0"
+    "tv:sync:ac": "node scripts/sync-tradingview-assets.mjs ac",
+    "tv:sync:tp": "node scripts/sync-tradingview-assets.mjs tp"
   },
   "devDependencies": {
-    "serve": "^14.2.5"
+    "serve": "^14.2.5",
+    "serve-handler": "^6.1.7"
   }
 }

@@ -5,8 +5,9 @@ node_modules/
 vendor/tradingview/
 
 # Local-only dependency copies
+charting_library-master/
+trading_platform-master/
 third_party/
-local-packages/
 
 # OS and npm noise
 .DS_Store

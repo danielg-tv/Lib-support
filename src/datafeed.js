@@ -14,7 +14,13 @@ import { subscribeOnStream, unsubscribeFromStream } from "./streaming.js";
 const lastBarsCache = new Map();
 const quotePriceCache = new Map();
 const quoteTickerState = new Map();
+const depthSubscriptions = new Map();
+const symbolPriceScaleCache = new Map();
 const INTRADAY_MULTIPLIERS = ["1", "3", "5", "15", "30", "60", "120", "240", "360", "480", "720"];
+const BINANCE_WS_URL = "wss://stream.binance.com:9443/ws";
+const DEPTH_LEVELS = 20;
+const DEPTH_PUSH_INTERVAL_MS = 250;
+const DEPTH_RECONNECT_DELAY_MS = 2_000;
 const FILE_MARKER_URL = new URL("./assets/file.svg", import.meta.url).href;
 const ALIEN_MARKER_URL = new URL("./assets/alien.svg", import.meta.url).href;
 
@@ -246,6 +252,19 @@ function buildQuoteFromState(symbol, state, fallbackQuote = null) {
   };
 }
 
+// Remembers symbol precision for the DOM fallback ladder before live depth arrives.
+function rememberSymbolPriceScale(symbolItem) {
+  [
+    symbolItem.ticker,
+    symbolItem.full_name,
+    symbolItem.symbol,
+  ].forEach((symbol) => {
+    if (symbol) {
+      symbolPriceScaleCache.set(symbol, symbolItem.priceScale);
+    }
+  });
+}
+
 // Fetches the initial REST snapshots that seed quotes before websocket updates arrive.
 async function fetchQuoteSnapshots(symbols) {
   const parsedSymbols = symbols
@@ -285,14 +304,11 @@ async function fetchQuoteSnapshots(symbols) {
 export default {
   // Publishes the datafeed capabilities TradingView uses during startup.
   onReady(callback) {
-    console.log("[onReady]");
     setTimeout(() => callback(configurationData));
   },
 
   // Returns search matches from the cached Binance spot symbol catalog.
   async searchSymbols(userInput, exchange, symbolType, onResultReadyCallback) {
-    console.log("[searchSymbols]", userInput, exchange, symbolType);
-
     const symbols = await getAllSymbols();
     const query = userInput.trim().toLowerCase();
 
@@ -311,8 +327,6 @@ export default {
 
   // Resolves a TradingView ticker into the symbol metadata needed to load a chart.
   async resolveSymbol(symbolName, onSymbolResolvedCallback, onResolveErrorCallback) {
-    console.log("[resolveSymbol]", symbolName);
-
     try {
       const symbols = await getAllSymbols();
       const symbolItem = getSymbolInfoItem(symbols, symbolName);
@@ -323,6 +337,7 @@ export default {
         return;
       }
 
+      rememberSymbolPriceScale(symbolItem);
       onSymbolResolvedCallback({
         ticker: symbolItem.ticker,
         name: symbolItem.symbol,
@@ -346,7 +361,6 @@ export default {
         data_status: "streaming",
       });
 
-      console.log("[resolveSymbol] Resolved:", symbolName);
     } catch (error) {
       console.error("[resolveSymbol] Error:", error);
       onResolveErrorCallback("unknown_symbol");
@@ -356,14 +370,6 @@ export default {
   // Fetches historical bars and rebuilds custom resolutions when needed.
   async getBars(symbolInfo, resolution, periodParams, onHistoryCallback, onErrorCallback) {
     const { from, to, firstDataRequest } = periodParams;
-    console.log(
-      "[getBars]",
-      symbolInfo.ticker,
-      resolution,
-      new Date(from * 1000).toISOString(),
-      "→",
-      new Date(to * 1000).toISOString(),
-    );
 
     const parsed = parseFullSymbol(symbolInfo.ticker);
     if (!parsed) {
@@ -403,7 +409,6 @@ export default {
         lastBarsCache.set(symbolInfo.ticker, { ...bars[bars.length - 1] });
       }
 
-      console.log(`[getBars] Returned ${bars.length} bar(s)`);
       onHistoryCallback(bars, { noData: false });
     } catch (error) {
       console.error("[getBars] Error:", error);
@@ -413,8 +418,6 @@ export default {
 
   // Starts the realtime stream for the active chart symbol and resolution.
   subscribeBars(symbolInfo, resolution, onRealtimeCallback, subscriberUID, onResetCacheNeededCallback) {
-    console.log("[subscribeBars]", subscriberUID, "@", resolution);
-
     subscribeOnStream(
       symbolInfo,
       resolution,
@@ -427,7 +430,6 @@ export default {
 
   // Stops the realtime bar stream when TradingView releases a subscriber.
   unsubscribeBars(subscriberUID) {
-    console.log("[unsubscribeBars]", subscriberUID);
     unsubscribeFromStream(subscriberUID);
   },
 
@@ -544,67 +546,189 @@ export default {
   // Tears down quote listeners that are no longer needed by the widget.
   unsubscribeQuotes(listenerGUID) {
     unsubscribeQuotesFromStream(listenerGUID);
-    console.log("[unsubscribeQuotes] Stopped:", listenerGUID);
   },
 
-  // temporary depth subscription
-     subscribeDepth(symbol, callback) {
-      const subscriptionUniqueId = this._createDepthSubscription(
-        'https://myserver.com',
-        symbol,
-        callback
-      );
-      return subscriptionUniqueId;
-    },
+  // Supplies live Binance top-of-book depth for the Trading Platform example.
+  subscribeDepth(symbol, callback) {
+    const listenerId = Math.round(Math.random() * 10000000).toString(36);
+    const subscription = {
+      symbol,
+      callback,
+      socket: null,
+      reconnectTimerId: null,
+      latestDepth: null,
+      closed: false,
+      intervalId: null,
+    };
 
-    unsubscribeDepth(listenerID) {
-      this._removeDepthSubscription(listenerID);
-    },
+    subscription.intervalId = window.setInterval(() => {
+      pushDepthSnapshot(subscription);
+    }, DEPTH_PUSH_INTERVAL_MS);
 
-    _createDepthSubscription(server, symbol, callback) {
-      // Create an uniqueID
-      const uniqueId = Math.round(Math.random() * 10000000).toString(36);
-      const latestPrice = 2378.6;
+    depthSubscriptions.set(listenerId, subscription);
+    pushDepthSnapshot(subscription);
+    connectDepthStream(subscription);
 
-      // Mocked data, using setInterval to fake data updates
-      const intervalId = setInterval(() => {
-        const data = {
-          snapshot: true,
-          bids: generateDOMData(
-            latestPrice + 0.05,
-            latestPrice + 10,
-            0.01,
-            10000
-          ),
-          asks: generateDOMData(
-            latestPrice - 0.05,
-            latestPrice - 10,
-            -0.01,
-            10000
-          )
-        };
-        callback(data);
-      }, 1000);
-      this._depthSubscriptions[uniqueId] = intervalId;
-      return uniqueId;
-    },
+    return listenerId;
+  },
 
-    _removeDepthSubscription(listenerID) {
-      const intervalId = this._depthSubscriptions[listenerID];
-      clearInterval(intervalId);
-    }
+  // Stops one Trading Platform DOM subscription and releases its socket/timer.
+  unsubscribeDepth(listenerID) {
+    const subscription = depthSubscriptions.get(listenerID);
+    if (!subscription) return;
+
+    subscription.closed = true;
+    window.clearInterval(subscription.intervalId);
+    window.clearTimeout(subscription.reconnectTimerId);
+    subscription.socket?.close();
+    depthSubscriptions.delete(listenerID);
+  },
 };
-  function generateDOMData(start, end, step, amount) {
-    const answer = [];
-    const steps = Math.abs((end - start) / step);
 
-    let count = 0;
-    for (let i = start; step < 0 ? i >= end : i <= end; i += step) {
-      count += 1;
-      answer.push({
-        price: i,
-        volume: (0.8 + 0.1 * Math.random()) * amount * ((steps - count) / steps)
-      });
-    }
-    return answer;
+// Opens Binance's partial-book stream for one DOM subscriber and reconnects if it drops.
+function connectDepthStream(subscription) {
+  const parsed = parseFullSymbol(subscription.symbol);
+  if (!parsed || parsed.exchange !== BINANCE_EXCHANGE) return;
+
+  const streamName = `${parsed.symbol.toLowerCase()}@depth${DEPTH_LEVELS}@100ms`;
+  const socket = new WebSocket(`${BINANCE_WS_URL}/${streamName}`);
+  subscription.socket = socket;
+
+  socket.addEventListener("message", (event) => {
+    const depth = parseDepthMessage(event.data);
+    if (!depth) return;
+
+    subscription.latestDepth = depth;
+    rememberDepthQuote(subscription.symbol, depth);
+  });
+
+  socket.addEventListener("close", () => {
+    if (subscription.closed) return;
+
+    subscription.reconnectTimerId = window.setTimeout(() => {
+      connectDepthStream(subscription);
+    }, DEPTH_RECONNECT_DELAY_MS);
+  });
+
+  socket.addEventListener("error", () => {
+    socket.close();
+  });
+}
+
+// Parses Binance partial-book messages into TradingView DOM level arrays.
+function parseDepthMessage(data) {
+  let message;
+
+  try {
+    message = JSON.parse(data);
+  } catch {
+    return null;
+  }
+
+  const bids = normalizeDepthLevels(message.bids ?? message.b);
+  const asks = normalizeDepthLevels(message.asks ?? message.a);
+  if (bids.length === 0 || asks.length === 0) return null;
+
+  return { bids, asks };
+}
+
+// Converts Binance [price, quantity] tuples into the DOM shape TradingView expects.
+function normalizeDepthLevels(levels) {
+  if (!Array.isArray(levels)) return [];
+
+  return levels
+    .map((level) => {
+      const price = parseFloat(level[0]);
+      const volume = parseFloat(level[1]);
+
+      if (!Number.isFinite(price) || !Number.isFinite(volume) || volume <= 0) {
+        return null;
+      }
+
+      return { price, volume };
+    })
+    .filter(Boolean)
+    .slice(0, DEPTH_LEVELS);
+}
+
+// Lets quote consumers reuse the best bid/ask learned from the DOM stream.
+function rememberDepthQuote(symbol, depth) {
+  const bid = depth.bids[0]?.price;
+  const ask = depth.asks[0]?.price;
+  if (!Number.isFinite(bid) || !Number.isFinite(ask)) return;
+
+  const price = (bid + ask) / 2;
+  quotePriceCache.set(symbol, {
+    ...quotePriceCache.get(symbol),
+    price,
+    lp: price,
+    bid,
+    ask,
+    spread: ask - bid,
+  });
+}
+
+// Pushes either live depth or a temporary synthetic ladder until live depth arrives.
+function pushDepthSnapshot(subscription) {
+  if (subscription.closed) return;
+
+  const snapshot = subscription.latestDepth
+    ? { snapshot: true, ...subscription.latestDepth }
+    : buildSyntheticDepthSnapshot(subscription.symbol);
+
+  subscription.callback(snapshot);
+}
+
+// Builds a visible fallback so the DOM widget is not blank before Binance sends data.
+function buildSyntheticDepthSnapshot(symbol) {
+  const latestPrice = getLatestDepthPrice(symbol);
+  const tickSize = getDepthTickSize(symbol, latestPrice);
+
+  return {
+    snapshot: true,
+    bids: generateSyntheticDOMData(latestPrice - tickSize, -tickSize, tickSize),
+    asks: generateSyntheticDOMData(latestPrice + tickSize, tickSize, tickSize),
   };
+}
+
+// Chooses the best available anchor price for synthetic DOM fallback levels.
+function getLatestDepthPrice(symbol) {
+  return quotePriceCache.get(symbol)?.price ?? lastBarsCache.get(symbol)?.close ?? 100;
+}
+
+// Reuses resolved symbol precision where possible so fallback levels move by valid ticks.
+function getDepthTickSize(symbol, latestPrice) {
+  const priceScale = symbolPriceScaleCache.get(symbol);
+  if (priceScale) return 1 / priceScale;
+
+  if (latestPrice >= 1000) return 0.1;
+  if (latestPrice >= 100) return 0.01;
+  if (latestPrice >= 1) return 0.001;
+  return 0.0001;
+}
+
+// Generates descending bid or ascending ask levels around the latest known price.
+function generateSyntheticDOMData(start, step, tickSize) {
+  const levels = [];
+  const amount = 10_000;
+
+  for (let index = 0; index < DEPTH_LEVELS; index += 1) {
+    const price = start + step * index;
+    const distanceWeight = (DEPTH_LEVELS - index) / DEPTH_LEVELS;
+    const jitter = 0.9 + Math.random() * 0.2;
+
+    levels.push({
+      price: roundToTick(price, tickSize),
+      volume: amount * distanceWeight * jitter,
+    });
+  }
+
+  return levels;
+}
+
+// Rounds fallback prices to the inferred tick precision.
+function roundToTick(price, tickSize) {
+  const decimals = Math.max(0, Math.ceil(-Math.log10(tickSize)));
+
+  return Number(price.toFixed(decimals));
+}

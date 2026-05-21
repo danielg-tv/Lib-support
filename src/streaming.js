@@ -8,6 +8,7 @@ import {
 const UPDATE_FREQUENCY = 250;
 const WSS_URL = "wss://stream.binance.com:9443/ws";
 const MAX_RECONNECT_DELAY = 30_000;
+const SOCKET_CONNECT_DELAY_MS = 100;
 
 const streamToSubscription = new Map();
 const subscriberToStream = new Map();
@@ -15,6 +16,7 @@ const subscriberToStream = new Map();
 let socket = null;
 let reconnectDelay = 1_000;
 let reconnectTimer = null;
+let connectTimer = null;
 let hasConnectedBefore = false;
 let requestId = 0;
 
@@ -24,8 +26,57 @@ function nextRequestId() {
   return requestId;
 }
 
+// Checks whether any chart pane currently needs realtime bar updates.
+function hasActiveStreams() {
+  return streamToSubscription.size > 0;
+}
+
+// Defers the first socket open until the chart's initial subscribe/unsubscribe churn settles.
+function ensureSocket() {
+  if (
+    socket &&
+    (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)
+  ) {
+    return socket;
+  }
+
+  if (!connectTimer) {
+    connectTimer = setTimeout(() => {
+      connectTimer = null;
+
+      if (hasActiveStreams()) {
+        socket = createSocket();
+      }
+    }, SOCKET_CONNECT_DELAY_MS);
+  }
+
+  return socket;
+}
+
+// Stops pending connection work when every bar subscriber has gone away.
+function stopSocketWorkIfIdle() {
+  if (hasActiveStreams()) return;
+
+  if (connectTimer) {
+    clearTimeout(connectTimer);
+    connectTimer = null;
+  }
+
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  reconnectDelay = 1_000;
+}
+
 // Creates the shared Binance websocket and restores subscriptions after reconnects.
 function createSocket() {
+  if (connectTimer) {
+    clearTimeout(connectTimer);
+    connectTimer = null;
+  }
+
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -34,8 +85,6 @@ function createSocket() {
   const ws = new WebSocket(WSS_URL);
 
   ws.addEventListener("open", () => {
-    console.log("[socket] Connected to Binance stream");
-
     if (hasConnectedBefore) {
       streamToSubscription.forEach((item) => {
         item.handlers.forEach((handler) => {
@@ -52,8 +101,12 @@ function createSocket() {
     });
   });
 
-  ws.addEventListener("close", (event) => {
-    console.log(`[socket] Disconnected (${event.code}). Reconnecting in ${reconnectDelay / 1000}s...`);
+  ws.addEventListener("close", () => {
+    if (socket === ws) {
+      socket = null;
+    }
+
+    if (!hasActiveStreams()) return;
 
     reconnectTimer = setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
@@ -61,8 +114,10 @@ function createSocket() {
     }, reconnectDelay);
   });
 
-  ws.addEventListener("error", (error) => {
-    console.error("[socket] Error:", error);
+  ws.addEventListener("error", () => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.close();
+    }
   });
 
   ws.addEventListener("message", onMessage);
@@ -72,15 +127,13 @@ function createSocket() {
 
 // Sends a websocket subscribe command when the socket is ready.
 function sendSubscribe(ws, streamName) {
-  if (ws.readyState !== WebSocket.OPEN) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   ws.send(JSON.stringify({
     method: "SUBSCRIBE",
     params: [streamName],
     id: nextRequestId(),
   }));
-
-  console.log("[socket] Subscribed:", streamName);
 }
 
 // Sends a websocket unsubscribe command when the last listener goes away.
@@ -92,8 +145,6 @@ function sendUnsubscribe(ws, streamName) {
     params: [streamName],
     id: nextRequestId(),
   }));
-
-  console.log("[socket] Unsubscribed:", streamName);
 }
 
 // Builds the Binance trade stream name for resolutions we assemble from ticks.
@@ -214,8 +265,7 @@ function onMessage(event) {
   }
 }
 
-socket = createSocket();
-
+// Batches websocket bursts before notifying TradingView, reducing chart redraw pressure.
 setInterval(() => {
   streamToSubscription.forEach((subscription) => {
     subscription.handlers.forEach((handler) => {
@@ -266,7 +316,6 @@ export function subscribeOnStream(
   if (existing) {
     existing.handlers.push(handler);
     subscriberToStream.set(subscriberUID, streamName);
-    console.log(`[subscribeBars] Attached handler to existing stream: ${streamName}`);
     return;
   }
 
@@ -276,8 +325,7 @@ export function subscribeOnStream(
   });
   subscriberToStream.set(subscriberUID, streamName);
 
-  sendSubscribe(socket, streamName);
-  console.log(`[subscribeBars] New stream: ${streamName}`);
+  sendSubscribe(ensureSocket(), streamName);
 }
 
 // Removes a chart subscriber and closes the stream when nobody is left on it.
@@ -297,9 +345,7 @@ export function unsubscribeFromStream(subscriberUID) {
   if (subscription.handlers.length === 0) {
     sendUnsubscribe(socket, streamName);
     streamToSubscription.delete(streamName);
-    console.log(`[unsubscribeBars] Stream removed: ${streamName}`);
+    stopSocketWorkIfIdle();
     return;
   }
-
-  console.log(`[unsubscribeBars] Handler removed; stream still active: ${streamName}`);
 }
