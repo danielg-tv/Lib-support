@@ -1,11 +1,11 @@
-import { createAdvancedChartOptions } from "./widget-options.js";
-import { installThemeToolbar } from "./toolbar.js";
+import { widget as createWidget } from '/vendor/tradingview/advanced_charts/charting_library.esm.js';
+import { createAdvancedChartOptions } from './widget-options.js';
+import { installThemeToolbar } from './toolbar.js';
 
 // Boots the minimal tutorial chart: shared widget options plus the theme toggle.
 function initChart() {
-  const widget = new TradingView.widget(createAdvancedChartOptions());
-
-  installThemeToolbar(widget);
+	const wdg = new createWidget(createAdvancedChartOptions());
+	installThemeToolbar(wdg);
 }
 
-window.addEventListener("DOMContentLoaded", initChart, { once: true });
+window.addEventListener('DOMContentLoaded', initChart, { once: true });
