@@ -36,8 +36,8 @@ const BINANCE_WS_URL = 'wss://stream.binance.com:9443/ws';
 const DEPTH_LEVELS = 20;
 const DEPTH_PUSH_INTERVAL_MS = 250;
 const DEPTH_RECONNECT_DELAY_MS = 2_000;
-const FILE_MARKER_URL = new URL('./assets/file.svg', import.meta.url).href;
-const ALIEN_MARKER_URL = new URL('./assets/alien.svg', import.meta.url).href;
+const FILE_MARKER_URL = new URL('../assets/file.svg', import.meta.url).href;
+const ALIEN_MARKER_URL = new URL('../assets/alien.svg', import.meta.url).href;
 
 let symbolsCachePromise = null;
 
